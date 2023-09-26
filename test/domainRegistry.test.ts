@@ -1,22 +1,28 @@
-// Завантажуємо необхідні бібліотеки
-const { expect } = require("chai");
-const { ethers } = require("hardhat");
+import { expect } from "chai";
+import { ethers } from "hardhat";
+import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 
-// Описуємо тестовий контракт
+// TEST contract ./contracts/domainRegistry.sol
 describe("DomainRegistry", function () {
-  let DomainRegistry;
-  let domainRegistry;
-  let addr1;
-  let addr2;
+  let DomainRegistry: any;
+  let domainRegistry: any;
+  let addr1: SignerWithAddress;
+  let addr2: SignerWithAddress;
 
   beforeEach(async function () {
-    [owner, addr1, addr2] = await ethers.getSigners();
+    [addr1, addr2] = await ethers.getSigners();
     DomainRegistry = await ethers.getContractFactory("DomainRegistry");
     domainRegistry = await DomainRegistry.deploy();
   });
 
   it("Should top level domain special characters", async function () {
-    const invalidDomainNames = [".com", "com.", "domain@name", "special*char", "example.com"];
+    const invalidDomainNames = [
+      ".com",
+      "com.",
+      "domain@name",
+      "special*char",
+      "example.com",
+    ];
 
     const depositAmount = ethers.parseEther("0.001");
     for (const domainName of invalidDomainNames) {
@@ -29,11 +35,7 @@ describe("DomainRegistry", function () {
   });
 
   it("Should with upercase", async function () {
-    const invalidDomainNames = [
-      "UA",
-      "Com",
-      "eXample",
-    ];
+    const invalidDomainNames = ["UA", "Com", "eXample"];
 
     const depositAmount = ethers.parseEther("0.001");
     for (const domainName of invalidDomainNames) {
@@ -66,7 +68,7 @@ describe("DomainRegistry", function () {
       .registerDomain(domainName, { value: depositAmount });
 
     const domain = await domainRegistry.domains(domainName);
-    expect(domain.owner).to.equal(addr1.address);
+    expect(domain.owner).to.equal(await addr1.getAddress());
     expect(domain.deposit).to.equal(depositAmount);
   });
 
@@ -80,7 +82,7 @@ describe("DomainRegistry", function () {
     const balanceBefore = await ethers.provider.getBalance(addr1);
     const tx = await domainRegistry.connect(addr1).releaseDomain(domainName);
     const receipt = await tx.wait(); // Очікуємо на підтвердження транзакції
-    const gasUsed = receipt.gasUsed * tx.gasPrice; // Газові витрати * ціна газу
+    const gasUsed = BigInt(receipt.gasUsed * tx.gasPrice); // Газові витрати * ціна газу
     const balanceAfter = await ethers.provider.getBalance(addr1);
     const domain = await domainRegistry.domains(domainName);
 

@@ -1,4 +1,9 @@
-require("@nomicfoundation/hardhat-toolbox");
+// require("@nomicfoundation/hardhat-toolbox");
+import { HardhatUserConfig, task } from "hardhat/config";
+import "solidity-coverage";
+import "@nomicfoundation/hardhat-toolbox";
+
+
 require("dotenv").config();
 
 const DEFAULT_MNEMONIC = "test test test test test test test test test test test junk";
@@ -8,17 +13,32 @@ const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 const COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY || "";
 const REPORT_GAS = process.env.REPORT_GAS || false;
 
-module.exports = {
-  solidity: "0.8.20",
+
+task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
+  const accounts = await hre.ethers.getSigners();
+
+  for (const account of accounts) {
+    console.log(account.address);
+  }
+});
+
+
+const config: HardhatUserConfig = {
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.16",
+      },
+    ],
+  },
   etherscan: {
     apiKey: {
-      "sepolia": ETHERSCAN_API_KEY
+      sepolia: ETHERSCAN_API_KEY,
     },
   },
   gasReporter: {
     currency: "USD",
     coinmarketcap: COINMARKETCAP_API_KEY,
-    enabled: REPORT_GAS,
     token: "ETH",
   },
   networks: {
@@ -41,3 +61,5 @@ module.exports = {
     },
   },
 };
+
+export default config;

@@ -30,6 +30,7 @@
     "hardhat:compile": "hardhat compile",
     "hardhat:compile:force": "hardhat compile --force",
     "hardhat:test": "hardhat test",
+    "hardhat:test:coverage": "hardhat coverage",
     "hardhat:test:gas": "REPORT_GAS=true COINMARKETCAP_API_KEY=$(security find-generic-password -w -s 'Coinmarketcap API Key') hardhat test",
     "hardhat:deploy:lock": "hardhat run scripts/deployLock.js --network localhost",
     "hardhat:deploy:lock:sepolia": "hardhat run scripts/deployLock.js --network sepolia",

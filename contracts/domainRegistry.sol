@@ -5,10 +5,10 @@ import "./domainsSetLibrary.sol";
 
 contract DomainRegistry {
     uint256 public collateral = 0.001 ether;
-    using DomainsSet for DomainsSet.Set;
-    using DomainsSet for DomainsSet.Domain;
+    using domainSet for domainSet.Set;
+    using domainSet for domainSet.Domain;
 
-    DomainsSet.Set internal domains;
+    domainSet.Set internal domains;
 
     event DomainRegistered(
         string domainName,
@@ -20,7 +20,7 @@ contract DomainRegistry {
         require(msg.value == collateral, "Deposit must equal to collateral");
         domains.add(
             domainName,
-            DomainsSet.Domain({owner: msg.sender, deposit: msg.value})
+            domainSet.Domain({owner: msg.sender, deposit: msg.value})
         );
         emit DomainRegistered(domainName, msg.sender, msg.value);
     }
@@ -39,14 +39,14 @@ contract DomainRegistry {
 
     function getDomain(
         string memory domainName
-    ) external view returns (DomainsSet.Domain memory) {
+    ) external view returns (domainSet.Domain memory) {
         return domains.get(domainName);
     }
 
     function getAllDomains()
         external
         view
-        returns (string[] memory, DomainsSet.Domain[] memory)
+        returns (string[] memory, domainSet.Domain[] memory)
     {
         return domains.items();
     }

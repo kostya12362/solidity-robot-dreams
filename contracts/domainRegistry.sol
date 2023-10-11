@@ -3,6 +3,7 @@ pragma solidity ^0.8.18;
 
 import "./domainsSetLibrary.sol";
 
+
 contract DomainRegistry {
     uint256 public collateral = 0.001 ether;
     using domainSet for domainSet.Set;
@@ -61,6 +62,7 @@ contract DomainRegistry {
     function countDomains() external view returns (uint256) {
         return domains.length();
     }
+    
 
     function getAllDomains() external view returns (domainSet.Domain[] memory) {
         return domains.items();

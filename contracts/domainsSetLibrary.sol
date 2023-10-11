@@ -1,326 +1,304 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
-// import "hardhat/console.sol";
+
+pragma solidity ^0.8.18;
 
 library domainSet {
     struct Domain {
+        string name;
         address owner;
         uint256 deposit;
     }
 
     struct Set {
-        string[] _values;
-        mapping(string => Domain) _positions;
+        Domain[] _values;
+        mapping(string => uint256) _positions;
     }
 
     function _add(
         Set storage set,
-        string memory value,
         Domain memory domain
     ) private returns (bool) {
-        set._values.push(value);
-        set._positions[value] = domain;
+        set._values.push(domain);
+        set._positions[domain.name] = set._values.length;
         return true;
     }
 
     function _get(
         Set storage set,
         string memory value
-    ) private view _checkSpecialCharacters(value) returns (Domain storage) {
-        return set._positions[value];
+    ) private view returns (Domain storage) {
+        return set._values[set._positions[value] - 1];
     }
 
     function _length(Set storage set) private view returns (uint256) {
         return set._values.length;
     }
 
-    function _compareStrings(
-        string memory a,
-        string memory b
-    ) public pure returns (bool) {
-        return
-            keccak256(abi.encodePacked(a)) ==
-            keccak256(abi.encodePacked(toLower(b)));
-    }
-
     function _remove(
         Set storage set,
         string memory value
     ) private returns (bool) {
-        for (uint256 i; i < _length(set); i++) {
-            if (_compareStrings(set._values[i], value)) {
-                if (i != _length(set) - 1) {
-                    set._values[i] = set._values[i + 1];
-                }
-                set._values.pop();
-                delete set._positions[value];
-                return true;
+        uint256 position = set._positions[value];
+        if (position != 0) {
+            uint256 valueIndex = position - 1;
+            uint256 lastIndex = set._values.length - 1;
+
+            if (valueIndex != lastIndex) {
+                Domain memory lastValue = set._values[lastIndex];
+                set._values[valueIndex] = lastValue;
+                set._positions[lastValue.name] = position;
             }
-        }
-        return false;
-    }
-
-    function _items(
-        Set storage set
-    ) internal view returns (string[] memory, Domain[] memory) {
-        uint256 length = _length(set);
-        string[] memory keys = new string[](length);
-        Domain[] memory values = new Domain[](length);
-
-        for (uint256 i = 0; i < length; i++) {
-            keys[i] = set._values[i];
-            values[i] = set._positions[set._values[i]];
-        }
-        return (keys, values);
-    }
-
-    function containsSpecialChars(
-        string memory input
-    ) internal pure returns (bool) {
-        bytes memory inputBytes = bytes(input);
-        bool usingDash = false;
-        bool usingDot = false;
-
-        
-        if (inputBytes.length == 0)
+            set._values.pop();
+            delete set._positions[value];
             return true;
-        // Проверяем, что строка не начинается и не заканчивается "." или "-"
-        if (
-            inputBytes.length > 0 &&
-            (inputBytes[0] == bytes1("-") || inputBytes[0] == bytes1("."))
-        ) return true;
-        if (
-            inputBytes.length > 0 &&
-            (inputBytes[inputBytes.length - 1] == bytes1("-") ||
-                inputBytes[inputBytes.length - 1] == bytes1("."))
-        ) return true;
-
-        for (uint i = 0; i < inputBytes.length; i++) {
-            bytes1 charByte = inputBytes[i];
-            if (
-                (charByte < bytes1("a") || charByte > bytes1("z")) &&
-                charByte != bytes1("-") &&
-                charByte != bytes1(".")
-            ) {
-                return true; // Нашли символ, который не буква [a-z], точка "." или дефис "-"
-            }
-            if (charByte == bytes1("-")) {
-                usingDash = true;
-            }
-            if (charByte == bytes1(".")) {
-                usingDot = true;
-            }
+        } else {
+            return false;
         }
-
-        if (usingDash && !usingDot) {
-            return true;
-        }
-
-        return false; // Все символы допустимы
     }
 
-    function removePrefix(
-        string memory input,
-        string memory prefix
-    ) internal pure returns (string memory) {
-        bytes memory inputBytes = bytes(input);
-        bytes memory prefixBytes = bytes(prefix);
+    function _items(Set storage set) internal view returns (Domain[] memory) {
+        return set._values;
+    }
 
-        if (inputBytes.length >= prefixBytes.length) {
-            bool isMatch = true;
-            for (uint256 i = 0; i < prefixBytes.length; i++) {
-                if (inputBytes[i] != prefixBytes[i]) {
-                    isMatch = false;
-                    break;
-                }
-            }
+    function toLowerCaseIfNeeded(
+        bytes1 charByte
+    ) internal pure returns (bytes1) {
+        if (bytes1("A") <= charByte && charByte <= bytes1("Z")) {
+            charByte = bytes1(uint8(charByte) + 32);
+        }
 
-            if (isMatch) {
-                string memory result = new string(
-                    inputBytes.length - prefixBytes.length
-                );
-                bytes memory resultBytes = bytes(result);
+        return charByte;
+    }
 
-                for (
-                    uint256 i = prefixBytes.length;
-                    i < inputBytes.length;
-                    i++
-                ) {
-                    resultBytes[i - prefixBytes.length] = inputBytes[i];
-                }
-
-                return result;
+    function removeNullBytes(
+        bytes memory data
+    ) public pure returns (bytes memory) {
+        uint256 newSize = 0;
+        for (uint256 i = 0; i < data.length; i++) {
+            if (data[i] != bytes1(0)) {
+                newSize++;
             }
         }
 
-        // If it doesn't match the prefix, return the original string
-        return input;
-    }
+        bytes memory result = new bytes(newSize);
+        uint256 newIndex = 0;
 
-    function _substring(
-        string memory str,
-        uint256 startIndex,
-        uint256 endIndex
-    ) internal pure returns (string memory) {
-        bytes memory strBytes = bytes(str);
-        require(
-            startIndex <= endIndex && endIndex <= strBytes.length,
-            "Invalid indices"
-        );
-        bytes memory result = new bytes(endIndex - startIndex);
-        for (uint256 i = startIndex; i < endIndex; i++) {
-            result[i - startIndex] = strBytes[i];
+        for (uint256 i = 0; i < data.length; i++) {
+            if (data[i] != bytes1(0)) {
+                result[newIndex] = data[i];
+                newIndex++;
+            }
         }
 
-        return string(result);
+        return result;
     }
 
-    function _append(
-        string[] memory arr,
-        string memory element
-    ) internal pure returns (string[] memory) {
-        string[] memory newArr = new string[](arr.length + 1);
-        for (uint256 i = 0; i < arr.length; i++) {
-            newArr[i] = arr[i];
-        }
-        newArr[arr.length] = element;
-        return newArr;
-    }
-
-    function _splitDomain(
+    function _validateDomainAssably(
         Set storage set,
         string memory input
-    ) internal view returns (string[] memory) {
-        string[] memory parts = new string[](0);
+    ) internal view returns (string memory) {
+        bytes memory inputData = bytes(input);
+        bytes memory outputData = new bytes(inputData.length);
+
+        bytes memory prefixHTTPS = bytes("https://");
+        bytes memory prefixHTTP = bytes("http://");
+
+        bool isHTTP;
+        bool httpError;
+        bool isDot;
+        bool specialSymbol;
+        uint256 inputLength = inputData.length - 1;
+
+        for (int256 i = int256(inputLength); i >= 0; i--) {
+            uint256 _index = uint256(i);
+
+            assembly {
+                let outputPtr := add(outputData, 0x20)
+                let inputPtr := add(inputData, 0x20)
+                let char := byte(0, mload(add(inputPtr, _index)))
+                if eq(isDot, true) {
+                    isDot := false
+                    mstore8(add(outputPtr, add(_index, 1)), 46)
+                }
+                // to lowercase
+                if and(lt(65, char), lt(char, 91)) {
+                    char := add(char, 32)
+                }
+                // check is dot
+                if and(
+                    and(eq(46, char), not(eq(_index, 0))),
+                    not(eq(_index, inputLength))
+                ) {
+                    isDot := true
+                }
+                if eq(char, 47) {
+                    let prefixHTTPSPtr := add(prefixHTTPS, 0x20)
+                    let prefixHTTPPtr := add(prefixHTTP, 0x20)
+                    for {
+                        let j := 0
+                    } lt(j, _index) {
+                        j := add(j, 1)
+                    } {
+                        isHTTP := or(
+                            eq(
+                                byte(0, mload(add(prefixHTTPSPtr, j))),
+                                byte(0, mload(add(inputPtr, j)))
+                            ),
+                            eq(
+                                byte(0, mload(add(prefixHTTPPtr, j))),
+                                byte(0, mload(add(inputPtr, j)))
+                            )
+                        )
+                    }
+                    if eq(isHTTP, false) {
+                        httpError := true
+                    }
+                }
+                if and(eq(isHTTP, false), eq(isDot, false)) {
+                    if or(
+                        and(
+                            eq(char, 45),
+                            and(eq(_index, 0), eq(_index, inputLength))
+                        ),
+                        and(lt(char, 47), gt(char, 58))
+                    ) {
+                        specialSymbol := true
+                    }
+                    mstore8(add(outputPtr, _index), char)
+                }
+            }
+
+            require(
+                specialSymbol != true,
+                "It is prohibited to use special characters"
+            );
+            require(httpError != true, "Domain start http:// or https://");
+            if (isDot == true) {
+                _domainNotRegistered(set, string(outputData));
+            }
+        }
+        return string(removeNullBytes(outputData));
+    }
+
+    function _validateDomain(
+        Set storage set,
+        string memory input
+    ) internal view returns (string memory) {
         bytes memory delimiter = bytes(".");
         bytes memory inputBytes = bytes(input);
         bytes memory concatenatedBytes = new bytes(0);
-
-        int256 end = int256(inputBytes.length) - 1;
+        uint256 _lastIndex = inputBytes.length - 1;
 
         for (int256 i = int256(inputBytes.length) - 1; i >= 0; i--) {
-            if (inputBytes[uint256(i)] == delimiter[0]) {
-                string memory part = _substring(
-                    input,
-                    uint256(i) + 1,
-                    uint256(end) + 1
+            // convert to lower case
+            uint256 _index = uint256(i);
+            inputBytes[_index] = toLowerCaseIfNeeded(inputBytes[_index]);
+
+            if (
+                inputBytes[_index] == delimiter[0] &&
+                _index != 0 &&
+                _index != _lastIndex
+            ) {
+                _domainNotRegistered(set, string(concatenatedBytes));
+            } else if (inputBytes[uint256(i)] == bytes1("/")[0]) {
+                // check https:// or http://
+                for (uint j = 0; j < _index; j++) {
+                    require(
+                        ((inputBytes[j] == bytes23("https://")[j]) ||
+                            (inputBytes[j] == bytes23("http://")[j])),
+                        "Domain start http:// or https://"
+                    );
+                }
+                break;
+            } else {
+                require(
+                    ((
+                        (inputBytes[_index] >= bytes1("a") &&
+                            inputBytes[_index] <= bytes1("z"))
+                    ) ||
+                        (inputBytes[_index] == bytes1("-") &&
+                            (_index != 0 && _index != _lastIndex)) ||
+                        (inputBytes[_index] >= bytes1("0") &&
+                            inputBytes[_index] <= bytes1("9"))),
+                    "It is prohibited to use special characters"
                 );
-                parts = _append(parts, part);
-                end = i - 1;
-                get(set, string(concatenatedBytes));
             }
+
             concatenatedBytes = abi.encodePacked(
                 inputBytes[uint256(i)],
                 concatenatedBytes
             );
         }
-
-        if (end > 0) {
-            string memory part = input;
-            if (parts.length != 0) {
-                part = _substring(input, 0, uint256(end) + 1);
-            }
-            parts = _append(parts, part);
-        }
-        return parts;
+        return string(concatenatedBytes);
     }
 
-    function clearHttpOrHttpsPrefix(string memory input) internal pure returns (string memory) {
-        string memory result = removePrefix(input, "https://");
-        return removePrefix(result, "http://");
-    }
-
-    function toLower(string memory _str) internal pure returns (string memory) {
-        // convert sting to lover case
-        bytes memory bStr = bytes(_str);
-        bytes memory bLower = new bytes(bStr.length);
-        for (uint i = 0; i < bStr.length; i++) {
-            // Uppercase character
-            if ((uint8(bStr[i]) >= 65) && (uint8(bStr[i]) <= 90)) {
-                bLower[i] = bytes1(uint8(bStr[i]) + 32);
-            } else {
-                bLower[i] = bStr[i];
-            }
-        }
-        return string(bLower);
-    }
-
-    modifier _checkDomainNameToLowerCase(string memory value) {
+    function _domainRegistered(
+        Set storage set,
+        string memory value
+    ) private view returns (string memory) {
         require(
-            _compareStrings(value, toLower(value)),
-            "Domain name must be in lower case"
-        );
-        _;
-    }
-
-    modifier _checkSpecialCharacters(string memory value) {
-        require(
-            containsSpecialChars(clearHttpOrHttpsPrefix(value)) == false,
-            "It is prohibited to use special characters"
-        );
-        _;
-    }
-
-    modifier _domainNotRegistered(Set storage set, string memory value) {
-        require(
-            _get(set, clearHttpOrHttpsPrefix(value)).owner == address(0),
+            (set._positions[value] == 0 ||
+                _get(set, value).owner == address(0)),
             "Domain is already registered"
         );
-        _;
+        return value;
     }
 
-    modifier _domainRegistered(Set storage set, string memory value) {
+    function _domainNotRegistered(
+        Set storage set,
+        string memory value
+    ) private view returns (string memory) {
         require(
-            _get(set, clearHttpOrHttpsPrefix(value)).owner != address(0),
+            (set._positions[value] != 0 &&
+                _get(set, value).owner != address(0)) || _length(set) > 0,
             "Domain is not registered"
         );
-        _;
+        return value;
     }
 
     function add(
         Set storage set,
-        string memory value,
         Domain memory domain
-    )
-        internal
-        _checkDomainNameToLowerCase(value)
-        _domainNotRegistered(set, value)
-        returns (bool)
-    {
-        value  = clearHttpOrHttpsPrefix(value);
-        _splitDomain(set, value);
-        return _add(set, value, domain);
+    ) internal returns (bool) {
+        domain.name = _domainRegistered(set, _validateDomain(set, domain.name));
+        return _add(set, domain);
+    }
+
+    function addAssably(
+        Set storage set,
+        Domain memory domain
+    ) internal returns (bool) {
+        domain.name = _domainRegistered(
+            set,
+            _validateDomainAssably(set, domain.name)
+        );
+        return _add(set, domain);
     }
 
     function remove(
         Set storage set,
         string memory value
-    )
-        internal
-        _checkDomainNameToLowerCase(value)
-        _domainRegistered(set, value)
-        returns (bool)
-    {
-        
-        return _remove(set, clearHttpOrHttpsPrefix(value));
+    ) internal returns (bool) {
+        return
+            _remove(
+                set,
+                _domainNotRegistered(set, _validateDomain(set, value))
+            );
     }
 
     function get(
         Set storage set,
         string memory value
-    )
-        internal
-        view 
-        _checkDomainNameToLowerCase(value)
-        _domainRegistered(set, value)
-        returns (Domain storage)
-    {
-        return _get(set, clearHttpOrHttpsPrefix(value));
+    ) internal view returns (Domain storage) {
+        return
+            _get(set, _domainNotRegistered(set, _validateDomain(set, value)));
     }
 
-    function items(
-        Set storage set
-    ) internal view returns (string[] memory, Domain[] memory) {
+    function items(Set storage set) internal view returns (Domain[] memory) {
         return _items(set);
+    }
+
+    function length(Set storage set) internal view returns (uint256) {
+        return _length(set);
     }
 }

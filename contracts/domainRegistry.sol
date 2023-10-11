@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.18;
 
 import "./domainsSetLibrary.sol";
 
@@ -19,8 +19,23 @@ contract DomainRegistry {
     function registerDomain(string memory domainName) external payable {
         require(msg.value == collateral, "Deposit must equal to collateral");
         domains.add(
-            domainName,
-            domainSet.Domain({owner: msg.sender, deposit: msg.value})
+            domainSet.Domain({
+                owner: msg.sender,
+                deposit: msg.value,
+                name: domainName
+            })
+        );
+        emit DomainRegistered(domainName, msg.sender, msg.value);
+    }
+
+    function registerDomainAssambly(string memory domainName) external payable {
+        require(msg.value == collateral, "Deposit must equal to collateral");
+        domains.addAssably(
+            domainSet.Domain({
+                owner: msg.sender,
+                deposit: msg.value,
+                name: domainName
+            })
         );
         emit DomainRegistered(domainName, msg.sender, msg.value);
     }
@@ -43,11 +58,11 @@ contract DomainRegistry {
         return domains.get(domainName);
     }
 
-    function getAllDomains()
-        external
-        view
-        returns (string[] memory, domainSet.Domain[] memory)
-    {
+    function countDomains() external view returns (uint256) {
+        return domains.length();
+    }
+
+    function getAllDomains() external view returns (domainSet.Domain[] memory) {
         return domains.items();
     }
 }

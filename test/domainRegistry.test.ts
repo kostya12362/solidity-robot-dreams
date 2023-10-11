@@ -17,7 +17,14 @@ describe(ContractName, function () {
   });
 
   it("Should top level domain special characters", async function () {
-    const invalidDomainNames = [".com", "com.", "domain@name", "special*char"];
+    const invalidDomainNames = [
+      ".com",
+      "com.",
+      "-com",
+      "ua-",
+      "domain@name",
+      "special*char",
+    ];
     for (const domainName of invalidDomainNames) {
       await expect(
         domainRegistry
@@ -31,11 +38,11 @@ describe(ContractName, function () {
     const invalidDomainNames = ["UA", "Com", "eXample"];
 
     for (const domainName of invalidDomainNames) {
-      await expect(
-        domainRegistry
-          .connect(addr1)
-          .registerDomain(domainName, { value: depositAmount })
-      ).to.be.revertedWith("Domain name must be in lower case");
+      await domainRegistry
+        .connect(addr1)
+        .registerDomain(domainName, { value: depositAmount });
+      let result = await domainRegistry.getDomain(domainName);
+      expect(result.name).to.equal(domainName.toLowerCase());
     }
   });
 
@@ -116,15 +123,28 @@ describe(ContractName, function () {
   });
 
   it("Check all domain in contract", async function () {
-    const domainsNames = ["com", "ua", "name", "story"];
+    const domainsNames = ["com", "ua"];
     for (const domainName of domainsNames) {
       await domainRegistry
         .connect(addr1)
         .registerDomain(domainName, { value: depositAmount });
     }
     const reuslt = await domainRegistry.getAllDomains();
-    expect(reuslt[0].length).to.equal(domainsNames.length);
-    expect(reuslt[1].length).to.equal(domainsNames.length);
+    const owner = await addr1.getAddress();
+    expect(reuslt[0].name).to.equal(domainsNames[0]);
+    expect(reuslt[1].name).to.equal(domainsNames[1]);
+    expect(reuslt[0].owner).to.equal(owner);
+    expect(reuslt[1].owner).to.equal(owner);
+  });
+
+  it("Check count registation domains", async function () {
+    const domainNames = ["gCoM", "qwerTyuiopasdfghjklzxcvbnmqwertyui"];
+    for (const domainName of domainNames) {
+      await domainRegistry
+        .connect(addr1)
+        .registerDomainAssambly(domainName, { value: depositAmount });
+    }
+    expect(await domainRegistry.countDomains()).to.equal(domainNames.length);
   });
 
   it("Checking the presence of a parent domain", async function () {
@@ -140,18 +160,94 @@ describe(ContractName, function () {
     await domainRegistry
       .connect(addr1)
       .registerDomain("com", { value: depositAmount });
-
-    const diferentVariants = [
-      "https://kos-data.com",
-      "http://kos-data.com",
-      "kos-data.com",
-    ];
     await domainRegistry
       .connect(addr1)
-      .registerDomain(diferentVariants[0], { value: depositAmount });
+      .registerDomain("http://kos-data.com", { value: depositAmount });
+
+    const diferentVariants = ["https://kos-data.com", "kos-data.com"];
     for (const domainName of diferentVariants) {
-      const getDomain = await domainRegistry.getDomain(domainName);
+      let getDomain = await domainRegistry.getDomain(domainName);
       expect(getDomain.owner).to.equal(await addr1.getAddress());
+    }
+  });
+
+  it("Check using prefix https:// or http:// if not valid ", async function () {
+    await domainRegistry
+      .connect(addr1)
+      .registerDomain("com", { value: depositAmount });
+
+    const notValidDomainName = "kos-https://data.com";
+    await expect(
+      domainRegistry
+        .connect(addr1)
+        .registerDomain(notValidDomainName, { value: depositAmount })
+    ).to.be.revertedWith("Domain start http:// or https://");
+  });
+
+  it("Check using registerDomainAssambly", async function () {
+    const domainNames = ["gCoM", "qwerTyuiopasdfghjklzxcvbnmqwertyui"];
+    for (const domainName of domainNames) {
+      await domainRegistry
+        .connect(addr1)
+        .registerDomainAssambly(domainName, { value: depositAmount });
+      let getDomain = await domainRegistry.getDomain(domainName);
+      expect(getDomain.owner).to.equal(await addr1.getAddress());
+    }
+  });
+
+  it("Check using not valid domain http assembly ", async function () {
+    await expect(
+      domainRegistry
+        .connect(addr1)
+        .registerDomainAssambly("pphttps://est", { value: depositAmount })
+    ).to.be.revertedWith("Domain start http:// or https://");
+  });
+
+  it("Check using prefix https or http registerDomainAssambly", async function () {
+    await domainRegistry
+      .connect(addr1)
+      .registerDomainAssambly("test", { value: depositAmount });
+
+    await domainRegistry
+      .connect(addr1)
+      .registerDomainAssambly("https://kos-data.test", {
+        value: depositAmount,
+      });
+    const diferentVariants = ["kos-data.test", "http://kos-data.test"];
+
+    for (const domainName of diferentVariants) {
+      let result = await domainRegistry.getDomain(domainName);
+      expect(result.owner).to.equal(await addr1.getAddress());
+    }
+  });
+
+  it("Get price asselby check", async function () {
+    await domainRegistry
+      .connect(addr1)
+      .registerDomainAssambly("test", { value: depositAmount });
+    let result0 = await domainRegistry
+      .connect(addr1)
+      .registerDomain("https://kos-data.test", { value: depositAmount });
+
+    let result1 = await domainRegistry
+      .connect(addr1)
+      .registerDomainAssambly("https://kos-dats.test", {
+        value: depositAmount,
+      });
+    console.log("Result not assembly", result0.gasPrice);
+    console.log("Result with assembly", result1.gasPrice);
+    if (result1.gasPrice < result0.gasPrice) {
+      console.log(
+        "With assembly less gas",
+        "====",
+        result0.gasPrice - result1.gasPrice
+      );
+    } else if (result1.gasPrice > result0.gasPrice) {
+      console.log(
+        "With not assebly less gas",
+        "====",
+        result1.gasPrice - result0.gasPrice
+      );
     }
   });
 });

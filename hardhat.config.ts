@@ -23,7 +23,7 @@ const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: "0.8.4",
+        version: "0.8.18",
       },
     ],
   },
@@ -39,6 +39,7 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {
+      allowUnlimitedContractSize: true,
       accounts: {
         mnemonic: DEFAULT_MNEMONIC,
         path: "m/44'/60'/0'/0",

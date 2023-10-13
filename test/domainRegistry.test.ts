@@ -1,19 +1,23 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { beforeEach } from "mocha";
 
 const ContractName = "DomainRegistry";
 
 // TEST contract ./contracts/domainRegistry.sol
 describe(ContractName, function () {
   let domainRegistry: any;
-  let addr1: SignerWithAddress;
+  let addrOwner: SignerWithAddress;
   let addr2: SignerWithAddress;
-  const depositAmount = ethers.parseEther("0.001");
+  let addr3: SignerWithAddress;
+  let contractAddress: SignerWithAddress;
+  const depositAmount = ethers.parseEther("0.006");
 
   beforeEach(async function () {
-    [addr1, addr2] = await ethers.getSigners();
+    [addrOwner, addr2, addr3] = await ethers.getSigners();
     domainRegistry = await ethers.deployContract(ContractName);
+    contractAddress = await domainRegistry.getAddress();
   });
 
   it("Should top level domain special characters", async function () {
@@ -28,8 +32,8 @@ describe(ContractName, function () {
     for (const domainName of invalidDomainNames) {
       await expect(
         domainRegistry
-          .connect(addr1)
-          .registerDomain(domainName, { value: depositAmount })
+          .connect(addrOwner)
+          .registerPriceDomain(domainName, depositAmount)
       ).to.be.revertedWith("It is prohibited to use special characters");
     }
   });
@@ -39,215 +43,283 @@ describe(ContractName, function () {
 
     for (const domainName of invalidDomainNames) {
       await domainRegistry
-        .connect(addr1)
-        .registerDomain(domainName, { value: depositAmount });
+        .connect(addrOwner)
+        .registerPriceDomain(domainName, depositAmount);
       let result = await domainRegistry.getDomain(domainName);
       expect(result.name).to.equal(domainName.toLowerCase());
     }
   });
 
-  it("Should register a domain with a deposit", async function () {
+  it("Should register owner domain with a deposit, price and zero address", async function () {
     const domainName = "example";
     await domainRegistry
-      .connect(addr1)
-      .registerDomain(domainName, { value: depositAmount });
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, depositAmount);
     const domain = await domainRegistry.getDomain(domainName);
-    expect(domain.owner).to.equal(await addr1.getAddress());
-    expect(domain.deposit).to.equal(depositAmount);
-  });
-
-  it("Should release a domain and refund the deposit", async function () {
-    const domainName = "example";
-    await domainRegistry
-      .connect(addr1)
-      .registerDomain(domainName, { value: depositAmount });
-    const balanceBefore = await ethers.provider.getBalance(addr1);
-    const tx = await domainRegistry.connect(addr1).removeDomain(domainName);
-    const receipt = await tx.wait();
-    const gasUsed = BigInt(receipt.gasUsed * tx.gasPrice);
-    const balanceAfter = await ethers.provider.getBalance(addr1);
-    await expect(domainRegistry.getDomain(domainName)).to.be.revertedWith(
-      "Domain is not registered"
-    );
-    // Check that the balance has changed to depositAmount + gas costs
-    const expectedBalanceChange = depositAmount - gasUsed;
-    expect(balanceAfter - balanceBefore).to.equal(expectedBalanceChange);
+    expect(domain.owner).to.equal(ethers.ZeroAddress);
+    expect(domain.deposit).to.equal(0);
+    expect(domain.price).to.equal(depositAmount);
   });
 
   it("Should not allow registration of an already registered domain", async function () {
     const domainName = "gov";
     await domainRegistry
-      .connect(addr1)
-      .registerDomain(domainName, { value: depositAmount });
-
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, depositAmount);
     await expect(
       domainRegistry
-        .connect(addr2)
-        .registerDomain(domainName, { value: depositAmount })
+        .connect(addrOwner)
+        .registerPriceDomain(domainName, depositAmount)
     ).to.be.revertedWith("Domain is already registered");
   });
 
-  it("Should not allow release of a domain by a non-owner", async function () {
+  it("Should verifying domain deletion by a non-contract owner", async function () {
     const domainName = "example";
     await domainRegistry
-      .connect(addr1)
-      .registerDomain(domainName, { value: depositAmount });
-
-    // An attempt to release a domain that is not the owner
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, depositAmount);
     await expect(
       domainRegistry.connect(addr2).removeDomain(domainName)
-    ).to.be.revertedWith("Only the owner can release the domain");
+    ).to.be.revertedWithCustomError(
+      domainRegistry,
+      "OwnableUnauthorizedAccount"
+    );
   });
 
-  it("Should not allow release of an unregistered domain", async function () {
-    const domainName = "com";
+  it("Verifies the deletion of a domain with the owner", async function () {
+    const domainName = "example";
+    await domainRegistry
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, depositAmount);
+
     await domainRegistry
       .connect(addr2)
       .registerDomain(domainName, { value: depositAmount });
-    // Attempting to release an unregistered domain
     await expect(
-      domainRegistry.connect(addr1).removeDomain(domainName)
-    ).to.be.revertedWith("Only the owner can release the domain");
-  });
-
-  it("Transfer of invalid deposit", async function () {
-    const domainName = "ua";
-    const notValidDeposidAmount = ethers.parseEther("1");
-    const defaulDeposit = await domainRegistry.collateral();
-    expect(defaulDeposit).to.not.equal(notValidDeposidAmount);
-    await expect(
-      domainRegistry
-        .connect(addr1)
-        .registerDomain(domainName, { value: notValidDeposidAmount })
-    ).to.be.revertedWith("Deposit must equal to collateral");
+      domainRegistry.connect(addrOwner).removeDomain(domainName)
+    ).to.be.revertedWith("Cannot delete a domain if it has an owner");
   });
 
   it("Check all domain in contract", async function () {
     const domainsNames = ["com", "ua"];
     for (const domainName of domainsNames) {
       await domainRegistry
-        .connect(addr1)
+        .connect(addrOwner)
+        .registerPriceDomain(domainName, depositAmount);
+      await domainRegistry
+        .connect(addrOwner)
         .registerDomain(domainName, { value: depositAmount });
     }
     const reuslt = await domainRegistry.getAllDomains();
-    const owner = await addr1.getAddress();
+    const owner = await addrOwner.getAddress();
     expect(reuslt[0].name).to.equal(domainsNames[0]);
     expect(reuslt[1].name).to.equal(domainsNames[1]);
     expect(reuslt[0].owner).to.equal(owner);
     expect(reuslt[1].owner).to.equal(owner);
   });
 
-  it("Check count registation domains", async function () {
-    const domainNames = ["gCoM", "qwerTyuiopasdfghjklzxcvbnmqwertyui"];
-    for (const domainName of domainNames) {
-      await domainRegistry
-        .connect(addr1)
-        .registerDomainAssambly(domainName, { value: depositAmount });
-    }
-    expect(await domainRegistry.countDomains()).to.equal(domainNames.length);
-  });
-
   it("Checking the presence of a parent domain", async function () {
     const domainName = "kos-data.com";
     await expect(
       domainRegistry
-        .connect(addr1)
+        .connect(addrOwner)
         .registerDomain(domainName, { value: depositAmount })
     ).to.be.revertedWith("Domain is not registered");
   });
 
   it("Check using prefix https or http ", async function () {
     await domainRegistry
-      .connect(addr1)
-      .registerDomain("com", { value: depositAmount });
+      .connect(addrOwner)
+      .registerPriceDomain("com", depositAmount);
     await domainRegistry
-      .connect(addr1)
-      .registerDomain("http://kos-data.com", { value: depositAmount });
+      .connect(addrOwner)
+      .registerPriceDomain("http://kos-data.com", depositAmount);
+
+    await domainRegistry
+      .connect(addr2)
+      .registerDomain("kos-data.com", { value: depositAmount });
 
     const diferentVariants = ["https://kos-data.com", "kos-data.com"];
     for (const domainName of diferentVariants) {
       let getDomain = await domainRegistry.getDomain(domainName);
-      expect(getDomain.owner).to.equal(await addr1.getAddress());
+      expect(getDomain.owner).to.equal(await addr2.getAddress());
     }
   });
 
   it("Check using prefix https:// or http:// if not valid ", async function () {
     await domainRegistry
-      .connect(addr1)
-      .registerDomain("com", { value: depositAmount });
+      .connect(addrOwner)
+      .registerPriceDomain("com", depositAmount);
 
     const notValidDomainName = "kos-https://data.com";
     await expect(
       domainRegistry
-        .connect(addr1)
-        .registerDomain(notValidDomainName, { value: depositAmount })
+        .connect(addrOwner)
+        .registerPriceDomain(notValidDomainName, depositAmount)
     ).to.be.revertedWith("Domain start http:// or https://");
   });
 
-  it("Check using registerDomainAssambly", async function () {
-    const domainNames = ["gCoM", "qwerTyuiopasdfghjklzxcvbnmqwertyui"];
-    for (const domainName of domainNames) {
-      await domainRegistry
-        .connect(addr1)
-        .registerDomainAssambly(domainName, { value: depositAmount });
-      let getDomain = await domainRegistry.getDomain(domainName);
-      expect(getDomain.owner).to.equal(await addr1.getAddress());
-    }
+  it("Should set the owner correctly", async function () {
+    const contractOwner = await domainRegistry.owner();
+    expect(contractOwner).to.equal(addrOwner.address);
   });
 
-  it("Check using not valid domain http assembly ", async function () {
+  it("Should add price not owner", async function () {
     await expect(
       domainRegistry
-        .connect(addr1)
-        .registerDomainAssambly("pphttps://est", { value: depositAmount })
-    ).to.be.revertedWith("Domain start http:// or https://");
+        .connect(addr2)
+        .registerPriceDomain("test", ethers.parseEther("0.001"))
+    ).to.be.revertedWithCustomError(
+      domainRegistry,
+      "OwnableUnauthorizedAccount"
+    );
   });
 
-  it("Check using prefix https or http registerDomainAssambly", async function () {
+  it("Should add price owner", async function () {
+    const priceOwner = ethers.parseEther("0.0005");
+    const domainName = "test";
     await domainRegistry
-      .connect(addr1)
-      .registerDomainAssambly("test", { value: depositAmount });
-
-    await domainRegistry
-      .connect(addr1)
-      .registerDomainAssambly("https://kos-data.test", {
-        value: depositAmount,
-      });
-    const diferentVariants = ["kos-data.test", "http://kos-data.test"];
-
-    for (const domainName of diferentVariants) {
-      let result = await domainRegistry.getDomain(domainName);
-      expect(result.owner).to.equal(await addr1.getAddress());
-    }
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, priceOwner);
+    const reusltAllDomains = await domainRegistry.getAllDomains();
+    expect(reusltAllDomains.length).to.equal(1);
+    expect(reusltAllDomains[0].owner).to.equal(ethers.ZeroAddress);
+    expect(reusltAllDomains[0].name).to.equal(domainName);
+    expect(reusltAllDomains[0].price).to.equal(priceOwner);
+    expect(reusltAllDomains[0].deposit).to.equal(0);
   });
 
-  it("Get price asselby check", async function () {
+  it("Transfer of invalid deposit", async function () {
+    const domainName = "ua";
+    const priceOwner = ethers.parseEther("0.005");
     await domainRegistry
-      .connect(addr1)
-      .registerDomainAssambly("test", { value: depositAmount });
-    let result0 = await domainRegistry
-      .connect(addr1)
-      .registerDomain("https://kos-data.test", { value: depositAmount });
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, priceOwner);
+    await expect(
+      domainRegistry
+        .connect(addr2)
+        .registerDomain(domainName, { value: depositAmount })
+    ).to.be.revertedWith("Deposit must equal to collateral");
+  });
 
-    let result1 = await domainRegistry
-      .connect(addr1)
-      .registerDomainAssambly("https://kos-dats.test", {
-        value: depositAmount,
-      });
-    console.log("Result not assembly", result0.gasPrice);
-    console.log("Result with assembly", result1.gasPrice);
-    if (result1.gasPrice < result0.gasPrice) {
-      console.log(
-        "With assembly less gas",
-        "====",
-        result0.gasPrice - result1.gasPrice
-      );
-    } else if (result1.gasPrice > result0.gasPrice) {
-      console.log(
-        "With not assebly less gas",
-        "====",
-        result1.gasPrice - result0.gasPrice
-      );
+  it("Should of valid deposit and re registration different address", async function () {
+    const domainName = "ua";
+    await domainRegistry
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, depositAmount);
+
+    await domainRegistry
+      .connect(addr2)
+      .registerDomain(domainName, { value: depositAmount });
+    await expect(
+      domainRegistry
+        .connect(addr3)
+        .registerDomain(domainName, { value: depositAmount })
+    ).to.be.revertedWith("The domain already has an owner");
+    const reusltAllDomains = await domainRegistry.getAllDomains();
+    expect(reusltAllDomains.length).to.equal(1);
+    expect(reusltAllDomains[0].owner).to.equal(await addr2.getAddress());
+    expect(reusltAllDomains[0].name).to.equal(domainName);
+    expect(reusltAllDomains[0].price).to.equal(depositAmount);
+    expect(reusltAllDomains[0].deposit).to.equal(depositAmount);
+  });
+
+  it("Checking refund after deletion by contract owner", async function () {
+    const domainName = "example";
+    await domainRegistry
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, depositAmount);
+
+    await domainRegistry
+      .connect(addrOwner)
+      .registerDomain(domainName, { value: depositAmount });
+
+    const balanceBefore = await ethers.provider.getBalance(addrOwner);
+    const tx = await domainRegistry.connect(addrOwner).removeDomain(domainName);
+    const receipt = await tx.wait();
+    const balanceAfter = await ethers.provider.getBalance(addrOwner);
+    await expect(domainRegistry.getDomain(domainName)).to.be.revertedWith(
+      "Domain is not registered"
+    );
+    // Check that the balance has changed to depositAmount + gas costs
+    const expectedBalanceChange = depositAmount - receipt.cumulativeGasUsed;
+    expect(balanceAfter - balanceBefore).to.equal(expectedBalanceChange);
+  });
+
+  it("Should of valid deposit and re registration owner", async function () {
+    const domainName = "ua";
+    await domainRegistry
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, depositAmount);
+
+    await domainRegistry
+      .connect(addrOwner)
+      .registerDomain(domainName, { value: depositAmount });
+
+    await expect(
+      domainRegistry
+        .connect(addr2)
+        .registerDomain(domainName, { value: depositAmount })
+    ).to.be.revertedWith("The domain already has an owner");
+
+    const reusltAllDomains = await domainRegistry.getAllDomains();
+    expect(reusltAllDomains.length).to.equal(1);
+    expect(reusltAllDomains[0].owner).to.equal(await addrOwner.getAddress());
+    expect(reusltAllDomains[0].name).to.equal(domainName);
+    expect(reusltAllDomains[0].price).to.equal(depositAmount);
+    expect(reusltAllDomains[0].deposit).to.equal(depositAmount);
+  });
+
+  it("Check validate registation price", async function () {
+    const domainName = "ua";
+    await expect(
+      domainRegistry
+        .connect(addrOwner)
+        .registerPriceDomain(domainName, ethers.parseEther("0"))
+    ).to.be.revertedWith("Price must be greater than 0");
+  });
+
+  it("Check balance owner of contracts", async function () {
+    const domainName = "ua";
+
+    const balanceBefore = await ethers.provider.getBalance(contractAddress);
+
+    await domainRegistry
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, depositAmount);
+    await domainRegistry
+      .connect(addr2)
+      .registerDomain(domainName, { value: depositAmount });
+    const balanceAfter = await ethers.provider.getBalance(contractAddress);
+    expect(balanceAfter - balanceBefore).to.equal(depositAmount);
+  });
+
+  it("Check length of domains registation", async function () {
+    const domainsName = ["ua", "com"];
+
+    for (const domainName in domainsName) {
+      await domainRegistry
+        .connect(addrOwner)
+        .registerPriceDomain(domainName, depositAmount);
     }
+    const result = await domainRegistry.countDomains();
+    expect(result).to.equal(domainsName.length);
+  });
+
+  it("Check length of domains registation", async function () {
+    const domainName = "ua";
+    const balanceBefore = await ethers.provider.getBalance(addrOwner.address);
+    await domainRegistry
+      .connect(addrOwner)
+      .registerPriceDomain(domainName, depositAmount);
+
+    await domainRegistry
+      .connect(addr2)
+      .registerDomain(domainName, { value: depositAmount });
+    const tx = await domainRegistry.connect(addrOwner).withdrawAllFunds();
+    await tx.wait();
+
+    const balanceAfter = await ethers.provider.getBalance(addrOwner.address);
+    expect(balanceAfter > balanceBefore).to.be.true;
   });
 });

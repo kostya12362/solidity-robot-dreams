@@ -8,8 +8,9 @@ import "hardhat/console.sol";
 contract DomainRegistry is Ownable {
     using domainSet for domainSet.Set;
     using domainSet for domainSet.Domain;
+
     receive() external payable {}
-    
+
     domainSet.Set internal domains;
 
     event DomainRegistered(
@@ -55,9 +56,8 @@ contract DomainRegistry is Ownable {
             })
         );
     }
-    
 
-    function removeDomain(string memory domainName) external onlyOwner payable {
+    function removeDomain(string memory domainName) external payable onlyOwner {
         domainSet.Domain memory domain = domains.get(domainName);
         require(
             domain.owner == address(0) || domain.owner == owner(),

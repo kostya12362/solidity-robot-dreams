@@ -3,7 +3,6 @@
 pragma solidity ^0.8.20;
 import "hardhat/console.sol";
 
-
 library domainSet {
     struct Domain {
         string name;
@@ -33,11 +32,10 @@ library domainSet {
         return set._values[set._positions[value] - 1];
     }
 
-    function _update( 
+    function _update(
         Set storage set,
         Domain memory domain
-    )
-        private returns (bool) {
+    ) private returns (bool) {
         uint256 _position = set._positions[domain.name];
         set._values[_position - 1] = domain;
         return true;
@@ -138,10 +136,7 @@ library domainSet {
         Set storage set,
         string memory value
     ) private view returns (string memory) {
-        require(
-            (set._positions[value] == 0),
-            "Domain is already registered"
-        );
+        require((set._positions[value] == 0), "Domain is already registered");
         return value;
     }
 
@@ -149,10 +144,7 @@ library domainSet {
         Set storage set,
         string memory value
     ) private view returns (string memory) {
-        require(
-            (set._positions[value] != 0),
-            "Domain is not registered"
-        );
+        require((set._positions[value] != 0), "Domain is not registered");
         return value;
     }
 
@@ -165,10 +157,13 @@ library domainSet {
     }
 
     function update(
-            Set storage set,
-            Domain memory domain
+        Set storage set,
+        Domain memory domain
     ) internal returns (bool) {
-        domain.name = _domainNotRegistered(set, _validateDomain(set, domain.name));
+        domain.name = _domainNotRegistered(
+            set,
+            _validateDomain(set, domain.name)
+        );
         return _update(set, domain);
     }
 
@@ -188,10 +183,7 @@ library domainSet {
         string memory value
     ) internal view returns (Domain storage) {
         return
-            _get(
-                set,
-                _domainNotRegistered(set, _validateDomain(set, value))
-            );
+            _get(set, _domainNotRegistered(set, _validateDomain(set, value)));
     }
 
     function items(Set storage set) internal view returns (Domain[] memory) {

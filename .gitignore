@@ -14,3 +14,4 @@ migration-result.json
 events-data.json
 yarn-error.log
 .debugger
+.deps

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import "./domainsSetLibrary.sol";
+import "./domainsSetAssemblyLibrary.sol";
 
-contract DomainRegistry {
+contract DomainRegistryAssembly {
     uint256 public collateral = 0.001 ether;
     using domainSet for domainSet.Set;
 

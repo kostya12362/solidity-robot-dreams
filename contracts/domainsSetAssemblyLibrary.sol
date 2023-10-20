@@ -35,13 +35,27 @@ library domainSet {
         return false;
     }
 
-    function toLowerCaseIfNeeded(
-        bytes1 charByte
-    ) internal pure returns (bytes1) {
-        if (bytes1("A") <= charByte && charByte <= bytes1("Z")) {
-            charByte = bytes1(uint8(charByte) + 32);
+    function removeNullBytes(
+        bytes memory data
+    ) public pure returns (bytes memory) {
+        uint256 newSize = 0;
+        for (uint256 i = 0; i < data.length; i++) {
+            if (data[i] != bytes1(0)) {
+                newSize++;
+            }
         }
-        return charByte;
+
+        bytes memory result = new bytes(newSize);
+        uint256 newIndex = 0;
+
+        for (uint256 i = 0; i < data.length; i++) {
+            if (data[i] != bytes1(0)) {
+                result[newIndex] = data[i];
+                newIndex++;
+            }
+        }
+
+        return result;
     }
 
     function removePrefix(
@@ -73,49 +87,66 @@ library domainSet {
     function _validateDomain(
         Set storage set,
         string memory input
-    ) internal view returns (string memory) {
-        bytes1 delimiter = bytes1(".");
-        bytes memory inputBytes = bytes(input);
-        bytes memory concatenatedBytes = new bytes(0);
-        uint256 _lastIndex = inputBytes.length - 1;
+    ) private view returns (string memory) {
+        bytes memory inputData = bytes(input);
+        bytes memory outputData = new bytes(inputData.length);
+        bool isDot;
+        bool specialSymbol;
 
-        if (inputBytes.length > 7 && inputBytes[7] == "/") {
-            inputBytes = removePrefix(inputBytes, "https://");
-        } else if (inputBytes.length > 6 && inputBytes[6] == "/") {
-            inputBytes = removePrefix(inputBytes, "http://");
+        if (inputData.length > 7 && inputData[7] == "/") {
+            inputData = removePrefix(inputData, "https://");
+        } else if (inputData.length > 6 && inputData[6] == "/") {
+            inputData = removePrefix(inputData, "http://");
         }
-        // console.log(string(inputBytes));
-        for (int256 i = int256(inputBytes.length) - 1; i >= 0; i--) {
-            // convert to lower case
+        uint256 inputLength = inputData.length - 1;
+        for (int256 i = int256(inputLength); i >= 0; i--) {
             uint256 _index = uint256(i);
-            inputBytes[_index] = toLowerCaseIfNeeded(inputBytes[_index]);
 
-            if (
-                inputBytes[_index] == delimiter &&
-                _index != 0 &&
-                _index != _lastIndex
-            ) {
-                _domainNotRegistered(set, string(concatenatedBytes));
-            } else {
-                require(
-                    ((
-                        (inputBytes[_index] >= bytes1("a") &&
-                            inputBytes[_index] <= bytes1("z"))
-                    ) ||
-                        (inputBytes[_index] == bytes1("-") &&
-                            (_index != 0 && _index != _lastIndex)) ||
-                        (inputBytes[_index] >= bytes1("0") &&
-                            inputBytes[_index] <= bytes1("9"))),
-                    "It is prohibited to use special characters"
-                );
+            assembly {
+                let outputPtr := add(outputData, 0x20)
+                let inputPtr := add(inputData, 0x20)
+                let char := byte(0, mload(add(inputPtr, _index)))
+                if eq(isDot, true) {
+                    isDot := false
+                    mstore8(add(outputPtr, add(_index, 1)), 46)
+                }
+                // to lowercase
+                if and(lt(64, char), lt(char, 91)) {
+                    char := add(char, 32)
+                }
+                // check is dot
+                if and(
+                    and(
+                        eq(char, 46),
+                        and(not(eq(_index, 0)), not(eq(_index, inputLength)))
+                    ),
+                    not(eq(_index, inputLength))
+                ) {
+                    isDot := true
+                }
+                if eq(isDot, false) {
+                    let isHyphen := and(
+                        eq(char, 45),
+                        and(not(eq(_index, 0)), not(eq(_index, inputLength)))
+                    ) // char == '-' && _index != 0 && _index != inputLength
+                    let isAlphabetic := and(gt(char, 96), lt(char, 123)) // 'a' <= char < 'z' (ASCII коды)
+                    let isNumeric := and(gt(char, 47), lt(char, 58)) // '0' <= char < '9' (ASCII коды)
+                    if eq(or(or(isAlphabetic, isHyphen), isNumeric), false) {
+                        specialSymbol := true
+                    }
+                    mstore8(add(outputPtr, _index), char)
+                }
+            }
+            if (isDot == true) {
+                _domainNotRegistered(set, string(removeNullBytes(outputData)));
             }
 
-            concatenatedBytes = abi.encodePacked(
-                inputBytes[_index],
-                concatenatedBytes
+            require(
+                specialSymbol != true,
+                "It is prohibited to use special characters"
             );
         }
-        return string(concatenatedBytes);
+        return string(removeNullBytes(outputData));
     }
 
     function _domainRegistered(
